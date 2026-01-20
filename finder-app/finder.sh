@@ -56,6 +56,8 @@ exit 0
 
 
 
-
+#Acknowledgement
 #Google search on finding the directory Exists or not 
 #https://www.google.com/search?q=bash+how+to+check+if+directory+exists+%3F
+#Google search on finding the number of lines found by grep
+#https://unix.stackexchange.com/questions/291225/count-the-number-of-lines-found-by-grep
