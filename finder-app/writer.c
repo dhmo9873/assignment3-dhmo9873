@@ -17,6 +17,8 @@ https://stackoverflow.com/questions/8485333/syslog-command-in-c-code
 #include <unistd.h>
 #include <string.h>
 #include <syslog.h>
+#include <errno.h>
+
 
 
 int main(int argc , char *argv[])
@@ -24,6 +26,7 @@ int main(int argc , char *argv[])
     openlog("writer", LOG_PID | LOG_PERROR, LOG_USER);
 
     if (argc < 3){
+        syslog(LOG_ERR, "Missing arguments or Invalid Arguments");
         printf("Error: Missing arguments.");
         printf("Usage: %s <inputfile> <inputstr>", argv[0]);
         closelog();
@@ -36,7 +39,7 @@ int main(int argc , char *argv[])
     fd = open(inputfile,O_WRONLY | O_CREAT | O_TRUNC, 0644 );
 
     if (fd == -1){
-        printf("\nERROR Opening File\n");
+        perror("Open");
         syslog(LOG_ERR, "Failed to open file %s", inputfile);
         closelog();
         return 1;
@@ -46,7 +49,7 @@ int main(int argc , char *argv[])
 
     nr = write(fd,inputstring,strlen(inputstring));
     if (nr == -1){
-        printf("\nError Writing to a file\n");
+        perror("Write");
         syslog(LOG_ERR, "Failed to write to file %s", inputfile);
         close(fd);
         closelog();
@@ -56,7 +59,7 @@ int main(int argc , char *argv[])
     syslog(LOG_DEBUG, "Writing to file succesfull");
 
     if (close (fd) == -1){
-        printf("\nError CLosing a file\n");
+        perror("Close");
         syslog(LOG_ERR, "Error in Closing the file %s", inputfile);
         closelog();
         return 1;
