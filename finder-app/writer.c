@@ -25,7 +25,7 @@ int main(int argc , char *argv[])
     const char *inputstring = argv[2];
 
     int fd;
-    fd = open(inputfile,O_RDWR | O_TRUNC );
+    fd = open(inputfile,O_WRONLY | O_CREAT | O_TRUNC, 0644 );
 
     if (fd == -1){
         printf("\nERROR Opening File\n");
