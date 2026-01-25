@@ -35,13 +35,12 @@ int main(int argc, char *argv[])
 {
     // Open a connection to the system logger
     // LOG_PID: Include PID with each message
-    // LOG_PERROR: Also print messages to stderr
     // LOG_USER: User-level messages
-    openlog("writer", LOG_PID | LOG_PERROR, LOG_USER);
+    openlog("writer", LOG_PID, LOG_USER);
 
     // Check for proper number of command-line arguments
     if (argc < 3) {
-        syslog(LOG_ERR, "Missing arguments or invalid arguments");
+        syslog(LOG_ERR, "Missing arguments. Usage: %s <file> <string>", argv[0]);
         printf("Error: Missing arguments.\n");
         printf("Usage: %s <inputfile> <inputstr>\n", argv[0]);
         closelog();
@@ -68,7 +67,8 @@ int main(int argc, char *argv[])
 
     // Write the input string to the file
     ssize_t nr = write(fd, inputstring, strlen(inputstring));
-    if (nr == -1) {
+    ssize_t stringlen = strlen(inputstring);
+    if ((nr == -1) || (nr != stringlen)) {
         perror("Write");
         syslog(LOG_ERR, "Failed to write to file %s: %s", inputfile,strerror(errno));
         close(fd);
@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    syslog(LOG_DEBUG, "Writing to file successful");
+    syslog(LOG_DEBUG, "Writing \"%s\" to %s", inputstring, inputfile);
 
     // Close the file descriptor
     if (close(fd) == -1) {
