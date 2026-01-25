@@ -4,6 +4,10 @@ and writes the string information into the file.
 
 Author: Dhigvijay Mohan
 Date : 25-01-2026
+
+
+Acnowledgement : usage of syslog 
+https://stackoverflow.com/questions/8485333/syslog-command-in-c-code
 */
 
 #include <stdio.h>
@@ -12,13 +16,17 @@ Date : 25-01-2026
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
+#include <syslog.h>
 
 
 int main(int argc , char *argv[])
 {
-    if (argc < 2){
+    openlog("writer", LOG_PID | LOG_PERROR, LOG_USER);
+
+    if (argc < 3){
         printf("Error: Missing arguments.");
         printf("Usage: %s <inputfile> <inputstr>", argv[0]);
+        closelog();
         return 1;
     }
     const char *inputfile = argv[1];
@@ -29,6 +37,8 @@ int main(int argc , char *argv[])
 
     if (fd == -1){
         printf("\nERROR Opening File\n");
+        syslog(LOG_ERR, "Failed to open file %s", inputfile);
+        closelog();
         return 1;
     }
 
@@ -37,13 +47,21 @@ int main(int argc , char *argv[])
     nr = write(fd,inputstring,strlen(inputstring));
     if (nr == -1){
         printf("\nError Writing to a file\n");
+        syslog(LOG_ERR, "Failed to write to file %s", inputfile);
+        close(fd);
+        closelog();
         return 1;
     }
     
+    syslog(LOG_DEBUG, "Writing to file succesfull");
 
     if (close (fd) == -1){
         printf("\nError CLosing a file\n");
+        syslog(LOG_ERR, "Error in Closing the file %s", inputfile);
+        closelog();
         return 1;
     }
+
+    closelog();
     return 0;
 }
