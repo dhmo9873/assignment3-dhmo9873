@@ -122,7 +122,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 
 /*
@@ -135,5 +135,51 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
 
     va_end(args);
 
-    return true;
+    pid_t pid = fork();
+
+	switch (pid) {
+    	case -1:
+		{
+			perror("fork");
+			return false;
+		}
+		case 0: //child process 
+		{
+    	    int fd = open(outputfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    	    if (fd == -1) {
+				perror("open");
+    	        exit(1);
+    	    	close(fd);
+			}
+
+    	    // Redirect stdout to the file
+    	    if (dup2(fd, 1) < 0) {
+    	        perror("dup2");
+				close(fd);
+    	        exit(1);
+    	    }
+
+    	    close(fd);
+
+    	    execv(command[0], command);
+
+    	    // execv only returns on failure
+    	    perror("execv");
+			exit(1);
+    	}
+		default:
+    	{
+			// parent process
+    		int status;
+    		if (waitpid(pid, &status, 0) == -1) {
+    		    return false;
+    		} 
+			if (WIFEXITED(status) && WEXITSTATUS(status) == 0 )  {
+    		    return true;
+    		}
+    		
+			return false;
+		}
+	}
+
 }
