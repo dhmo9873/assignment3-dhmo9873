@@ -105,7 +105,9 @@ cp finder.sh ${OUTDIR}/rootfs/home/
 sed -i '1s|^#!/bin/bash|#!/bin/sh|' ${OUTDIR}/rootfs/home/finder.sh
 cp finder-test.sh ${OUTDIR}/rootfs/home/
 sed -i 's|\.\./conf/assignment.txt|conf/assignment.txt|g' ${OUTDIR}/rootfs/home/finder-test.sh
-cp -rf conf ${OUTDIR}/rootfs/home/
+
+mkdir -p ${OUTDIR}/rootfs/home/conf
+cp -r ${FINDER_APP_DIR}/conf/* ${OUTDIR}/rootfs/home/conf/
 
 # TODO: Chown the root directory
 sudo chown -R root:root ${OUTDIR}/rootfs
