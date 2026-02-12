@@ -23,7 +23,7 @@ void handle_signal(int sig) {
 	exit_flag = 1;
 }
 
-int main(void)
+int main(int argc, char* argv[])
 {
 
 	struct sigaction sa;
@@ -45,6 +45,12 @@ int main(void)
 	socklen_t addr_size;
 	struct addrinfo hints, *res;
 	int sockfd, new_fd;
+	int daemon_mode = 0;
+
+	/* Check for -d argument */
+	if (argc == 2 && strcmp(argv[1], "-d") == 0) {
+		daemon_mode = 1;
+	}
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;  
@@ -74,6 +80,29 @@ int main(void)
 	}
 	freeaddrinfo(res);
 
+    if (daemon_mode) {
+        pid_t pid = fork();
+        if (pid < 0) {
+            exit(EXIT_FAILURE);
+        }
+        if (pid > 0) {
+            exit(EXIT_SUCCESS);
+        }
+
+        umask(0);
+
+        if (setsid() < 0) {
+            exit(EXIT_FAILURE);
+        }
+
+        if (chdir("/") < 0) {
+            exit(EXIT_FAILURE);
+        }
+
+        close(STDIN_FILENO);
+        close(STDOUT_FILENO);
+        close(STDERR_FILENO);
+    }
 
 	addr_size = sizeof (their_addr);
 	while (!exit_flag) {
