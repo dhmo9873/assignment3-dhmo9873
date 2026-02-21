@@ -31,7 +31,7 @@ TARGET = aesdsocket
 # -Wall   Enable all warnings
 # -Werror Treat warnings as errors
 # -g      Include debug symbols
-CFLAGS := -Wall -Werror -g
+CFLAGS := -Wall -Werror -g -lpthread
 
 # Source files
 SOURCES = aesdsocket.c

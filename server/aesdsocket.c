@@ -26,6 +26,7 @@ struct thread_node {
 	pthread_t thread;
 	int  conn_id;
 	bool thread_complete_success;
+	struct sockaddr_storage *their_addr;
 	struct thread_node *next_node;
 };
 
@@ -33,6 +34,80 @@ void handle_signal(int sig) {
     syslog(LOG_INFO, "Caught signal, exiting");
 	exit_flag = 1;
 }
+
+void* handle_connections(void *arg){
+	struct thread_node *conn = (struct thread_node *)arg;
+
+	/* Extract and log client IP address */
+	char ipstr[INET6_ADDRSTRLEN];
+	void *addr;
+
+	if ((*(conn->their_addr)).ss_family == AF_INET) {
+		struct sockaddr_in *ipv4 = (struct sockaddr_in *)conn->their_addr;
+		addr = &(ipv4->sin_addr);
+	} else {
+		struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)conn->their_addr;
+		addr = &(ipv6->sin6_addr);
+	}
+
+	inet_ntop((*(conn->their_addr)).ss_family, addr, ipstr, sizeof(ipstr));
+	syslog(LOG_INFO, "Accepted connection from %s", ipstr);
+
+	char buffer[1024];
+	char *packet = NULL;
+	int packet_len = 0;
+
+	/*
+	 * Receive data until newline is detected.
+	 * Each newline-terminated packet is appended to file.
+	 */
+	while (!exit_flag) {
+		int bytes = recv(conn->conn_id, buffer, sizeof(buffer), 0);
+		if (bytes <= 0)
+			break;
+
+		char *temp = realloc(packet, packet_len + bytes);
+		if (!temp){
+			free(packet);
+			packet = NULL;
+			break;
+		}
+		packet = temp;
+		memcpy(packet + packet_len, buffer, bytes);
+		packet_len += bytes;
+
+		// Check if packet contains newline (packet complete)
+		if (memchr(packet, '\n', packet_len) != NULL)
+		{
+			int fd = open("/var/tmp/aesdsocketdata", O_WRONLY | O_CREAT | O_APPEND, 0644);
+			if (fd >= 0) {
+				write(fd, packet, packet_len);
+				close(fd);
+			}
+
+			// Send entire file contents back to client
+			fd = open("/var/tmp/aesdsocketdata", O_RDONLY);
+			if (fd >= 0) {
+				ssize_t r;
+				while ((r = read(fd, buffer, sizeof(buffer))) > 0) {
+					send(conn->conn_id, buffer, r, 0);
+				}
+				close(fd);
+			}
+
+			free(packet);
+			packet = NULL;
+			packet_len = 0;
+		}
+	}
+	free(packet);
+	close(conn->conn_id);
+
+	syslog(LOG_INFO, "Closed connection from %s", ipstr);
+
+	return NULL;
+}
+
 
 int main(int argc, char* argv[])
 {
@@ -63,8 +138,10 @@ int main(int argc, char* argv[])
     struct sockaddr_storage their_addr;   // Storage for client address
 	socklen_t addr_size;
 	struct addrinfo hints, *res;
-	int sockfd, new_fd;
+	int sockfd;
 	int daemon_mode = 0;
+	struct thread_node *head = NULL;
+	int ret;
 
     /* Check if -d argument is provided (daemon mode) */
 	if (argc == 2 && strcmp(argv[1], "-d") == 0) {
@@ -139,7 +216,7 @@ int main(int argc, char* argv[])
 	while (!exit_flag) {
 
 		addr_size = sizeof (their_addr);
-		new_fd = accept(sockfd, (struct sockaddr *)&their_addr,&addr_size);
+		int new_fd = accept(sockfd, (struct sockaddr *)&their_addr,&addr_size);
 
 		if (new_fd < 0) {
 			if (errno == EINTR && exit_flag)
@@ -147,73 +224,51 @@ int main(int argc, char* argv[])
 			perror("accept");
 			continue;
 		}
-        
-        /* Extract and log client IP address */
-        char ipstr[INET6_ADDRSTRLEN];
-        void *addr;
 
-        if (their_addr.ss_family == AF_INET) {
-            struct sockaddr_in *ipv4 = (struct sockaddr_in *)&their_addr;
-            addr = &(ipv4->sin_addr);
-        } else {
-            struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)&their_addr;
-            addr = &(ipv6->sin6_addr);
-        }
-
-        inet_ntop(their_addr.ss_family, addr, ipstr, sizeof(ipstr));
-        syslog(LOG_INFO, "Accepted connection from %s", ipstr);
-
-		char buffer[1024];
-		char *packet = NULL;
-		int packet_len = 0;
-
-        /*
-         * Receive data until newline is detected.
-         * Each newline-terminated packet is appended to file.
-         */
-		while (!exit_flag) {
-			int bytes = recv(new_fd, buffer, sizeof(buffer), 0);
-			if (bytes <= 0)
-				break;
-
-			char *temp = realloc(packet, packet_len + bytes);
-			if (!temp){
-				free(packet);
-				packet = NULL;
-				break;
-			}
-			packet = temp;
-			memcpy(packet + packet_len, buffer, bytes);
-			packet_len += bytes;
-
-            // Check if packet contains newline (packet complete)
-			if (memchr(packet, '\n', packet_len) != NULL)
-			{
-				int fd = open("/var/tmp/aesdsocketdata", O_WRONLY | O_CREAT | O_APPEND, 0644);
-				if (fd >= 0) {
-					write(fd, packet, packet_len);
-					close(fd);
-				}
-
-                // Send entire file contents back to client
-				fd = open("/var/tmp/aesdsocketdata", O_RDONLY);
-				if (fd >= 0) {
-					ssize_t r;
-					while ((r = read(fd, buffer, sizeof(buffer))) > 0) {
-						send(new_fd, buffer, r, 0);
-					}
-					close(fd);
-				}
-
-				free(packet);
-				packet = NULL;
-				packet_len = 0;
-			}
+		struct thread_node *new_node = malloc(sizeof(struct thread_node));
+		
+		if (new_node == NULL){
+			syslog(LOG_INFO, "Malloc for new thread_node creation failed");
+			continue;
 		}
-		free(packet);
-		close(new_fd);
 
-        syslog(LOG_INFO, "Closed connection from %s", ipstr);
+		new_node->thread_complete_success = false;
+		new_node->conn_id = new_fd;
+		new_node->their_addr = &their_addr;
+		new_node->next_node = head;
+		head = new_node;
+
+		ret = pthread_create(&new_node->thread, NULL, handle_connections, (void *)new_node);
+     
+		if (ret != 0 ) {
+			free(new_node);
+			continue;
+		}
+	
+
+		struct thread_node* current;
+		current = head;
+		while(current != NULL){
+			while (head != NULL && head->thread_complete_success){
+				pthread_join(head->thread, NULL);
+				struct thread_node *tmp = head;
+				head = head->next_node;
+				free(tmp);
+			}
+			current = head ;
+			while(current != NULL && current->next_node != NULL){
+				if (current->next_node->thread_complete_success){
+					pthread_join(current->next_node->thread, NULL);
+					struct thread_node *tmp = current->next_node;
+					current->next_node = current->next_node->next_node;
+					free(tmp);
+				} else {
+					current = current->next_node;
+				}
+			}
+
+		}
+
 	}
 	close(sockfd);
 	if (remove("/var/tmp/aesdsocketdata") == 0) {
