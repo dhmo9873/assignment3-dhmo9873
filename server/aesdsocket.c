@@ -41,29 +41,25 @@ void handle_signal(int sig) {
 void* timestamp_thread(void *arg)
 {
     while (!exit_flag) {
-        sleep(10);
+        for (int i = 0; i < 10 && !exit_flag; i++) sleep(1);
+        if (exit_flag) 
+			break;
 
         time_t t = time(NULL);
-        struct tm *tmp = localtime(&t);
+        struct tm tmp_tm;
+        localtime_r(&t, &tmp_tm);
 
-        char timebuf[100];
         char finalbuf[150];
-
-        strftime(timebuf, sizeof(timebuf),
-                 "%a, %d %b %Y %H:%M:%S %z", tmp);
-
-        snprintf(finalbuf, sizeof(finalbuf),
-                 "timestamp:%s\n", timebuf);
+        char timebuf[100];
+        strftime(timebuf, sizeof(timebuf), "%a, %d %b %Y %H:%M:%S %z", &tmp_tm);
+        int len = snprintf(finalbuf, sizeof(finalbuf), "timestamp:%s\n", timebuf);
 
         pthread_mutex_lock(&mutex);
-
-        int fd = open("/var/tmp/aesdsocketdata",
-                      O_WRONLY | O_CREAT | O_APPEND, 0644);
+        int fd = open("/var/tmp/aesdsocketdata", O_WRONLY | O_CREAT | O_APPEND, 0644);
         if (fd >= 0) {
-            write(fd, finalbuf, strlen(finalbuf));
+            write(fd, finalbuf, len);
             close(fd);
         }
-
         pthread_mutex_unlock(&mutex);
     }
     return NULL;
@@ -300,28 +296,26 @@ int main(int argc, char* argv[])
 
 		struct thread_node* current;
 		current = head;
-		while(current != NULL){
-			while (head != NULL && head->thread_complete_success){
-				pthread_join(head->thread, NULL);
-				struct thread_node *tmp = head;
-				head = head->next_node;
+		while (head != NULL && head->thread_complete_success){
+			pthread_join(head->thread, NULL);
+			struct thread_node *tmp = head;
+			head = head->next_node;
+			free(tmp->their_addr);
+			free(tmp);
+		}
+		current = head ;
+		while(current != NULL && current->next_node != NULL){
+			if (current->next_node->thread_complete_success){
+				pthread_join(current->next_node->thread, NULL);
+				struct thread_node *tmp = current->next_node;
+				current->next_node = current->next_node->next_node;
 				free(tmp->their_addr);
 				free(tmp);
+			} else {
+				current = current->next_node;
 			}
-			current = head ;
-			while(current != NULL && current->next_node != NULL){
-				if (current->next_node->thread_complete_success){
-					pthread_join(current->next_node->thread, NULL);
-					struct thread_node *tmp = current->next_node;
-					current->next_node = current->next_node->next_node;
-					free(tmp->their_addr);
-					free(tmp);
-				} else {
-					current = current->next_node;
-				}
-			}
-
 		}
+
 
 	}
 	close(sockfd);
