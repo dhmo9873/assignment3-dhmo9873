@@ -16,6 +16,7 @@
 #include <syslog.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <time.h>
 
 #define MYPORT "9000"
 #define BACKLOG 10
@@ -36,6 +37,38 @@ void handle_signal(int sig) {
     syslog(LOG_INFO, "Caught signal, exiting");
 	exit_flag = 1;
 }
+
+void* timestamp_thread(void *arg)
+{
+    while (!exit_flag) {
+        sleep(10);
+
+        time_t t = time(NULL);
+        struct tm *tmp = localtime(&t);
+
+        char timebuf[100];
+        char finalbuf[150];
+
+        strftime(timebuf, sizeof(timebuf),
+                 "%a, %d %b %Y %H:%M:%S %z", tmp);
+
+        snprintf(finalbuf, sizeof(finalbuf),
+                 "timestamp:%s\n", timebuf);
+
+        pthread_mutex_lock(&mutex);
+
+        int fd = open("/var/tmp/aesdsocketdata",
+                      O_WRONLY | O_CREAT | O_APPEND, 0644);
+        if (fd >= 0) {
+            write(fd, finalbuf, strlen(finalbuf));
+            close(fd);
+        }
+
+        pthread_mutex_unlock(&mutex);
+    }
+    return NULL;
+}
+
 
 void* handle_connections(void *arg){
 	struct thread_node *conn = (struct thread_node *)arg;
@@ -214,6 +247,9 @@ int main(int argc, char* argv[])
         close(STDERR_FILENO);
     }
 
+	pthread_t timer_thread_id;
+    pthread_create(&timer_thread_id, NULL, timestamp_thread, NULL);
+
     /*
      * Main server loop:
      * Accept connections until signal received
@@ -256,6 +292,8 @@ int main(int argc, char* argv[])
      
 		if (ret != 0 ) {
 			free(new_node);
+			free(addr_copy);
+			close(new_fd);
 			continue;
 		}
 	
@@ -267,6 +305,7 @@ int main(int argc, char* argv[])
 				pthread_join(head->thread, NULL);
 				struct thread_node *tmp = head;
 				head = head->next_node;
+				free(tmp->their_addr);
 				free(tmp);
 			}
 			current = head ;
@@ -275,6 +314,7 @@ int main(int argc, char* argv[])
 					pthread_join(current->next_node->thread, NULL);
 					struct thread_node *tmp = current->next_node;
 					current->next_node = current->next_node->next_node;
+					free(tmp->their_addr);
 					free(tmp);
 				} else {
 					current = current->next_node;
@@ -294,6 +334,10 @@ int main(int argc, char* argv[])
 		free(tmp->their_addr);
 		free(tmp);
 	}
+
+	pthread_join(timer_thread_id, NULL);
+
+
 	if (remove("/var/tmp/aesdsocketdata") == 0) {
         printf("File '%s' deleted successfully.\n", "/var/tmp/aesdsocketdata");
     } else {
