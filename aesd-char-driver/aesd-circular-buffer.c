@@ -44,6 +44,9 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
         }
         total_size += current_entry->size;
         ind = (ind + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+		if (ind == buffer->in_offs && !buffer->full) {
+            break; 
+        }
 	}
     return NULL;
 }
