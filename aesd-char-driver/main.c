@@ -56,7 +56,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     ssize_t retval = 0;
 	struct aesd_dev *dev = filp->private_data;
 	size_t entry_offset_byte_rtn;
-	struct aesd_buffer_entry *current_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->buffer,*f_pos,&entry_offset_byte_rtn);
+	struct aesd_buffer_entry *current_entry ;
     PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
 
 
@@ -64,23 +64,20 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 		return -ERESTARTSYS;
 	}	
 
-    if (current_entry == NULL){
-		mutex_unlock(&dev->mutex_lock);
-        return 0;
-	}
+	while (retval < count) {
+		current_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->buffer, *f_pos, &entry_offset_byte_rtn);
 
-	while (count > 0 && entry_offset_byte_rtn < current_entry->size) {
+		if (!current_entry) {
+			break; // No more data available
+		}
 
-		if (copy_to_user(buf, current_entry->buffptr + entry_offset_byte_rtn, 1)) {
+		if (copy_to_user(buf + retval, current_entry->buffptr + entry_offset_byte_rtn, 1)) {
 			mutex_unlock(&dev->mutex_lock);
 			return -EFAULT;
 		}
 
-		buf++; 
-		entry_offset_byte_rtn++;
 		(*f_pos)++;
 		retval++;
-		count--;
 	}
 	/**
 	 * TODO: handle read
@@ -94,6 +91,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 	struct aesd_dev *dev = filp->private_data;
 	char *new_data;
 	const char *overwritten_ptr;
+	ssize_t retval = count;
 	PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 
 	if (mutex_lock_interruptible(&dev->mutex_lock)) {
@@ -106,12 +104,13 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 		return -ENOMEM;
 	}
 
+	dev->partial_write_buffer.buffptr = new_data;
+
 	if (copy_from_user(new_data + dev->partial_write_buffer.size, buf, count)) {
 		mutex_unlock(&dev->mutex_lock);
 		return -EFAULT;
 	}
 
-	dev->partial_write_buffer.buffptr = new_data;
 	dev->partial_write_buffer.size += count;
 
 	if (new_data[dev->partial_write_buffer.size - 1] == '\n') {
@@ -205,3 +204,4 @@ void aesd_cleanup_module(void)
 
 module_init(aesd_init_module);
 module_exit(aesd_cleanup_module);
+
