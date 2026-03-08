@@ -73,11 +73,10 @@ const char* aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
 
 	buffer->in_offs = (buffer->in_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;  // Move write index forward, wrapping around if needed
 
-	if(buffer->full){                                                   // If buffer is full, the oldest entry will be overwritten
-		buffer->out_offs = (buffer->out_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; // Advance read index to maintain consistency
+	if(buffer->full) {
+		buffer->out_offs = buffer->in_offs;
 	}
-
-	if(buffer->in_offs == buffer->out_offs && (!buffer->full)) {                           // When write index catches up to read index, buffer is full
+	else if(buffer->in_offs == buffer->out_offs ) {                           // When write index catches up to read index, buffer is full
 		buffer->full = true;                                            // Mark buffer as full
 	}
 

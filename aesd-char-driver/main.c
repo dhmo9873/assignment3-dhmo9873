@@ -59,7 +59,10 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	struct aesd_buffer_entry *current_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->buffer,*f_pos,&entry_offset_byte_rtn);
     PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
 
-	
+
+	if (mutex_lock_interruptible(&dev->mutex_lock)) {
+		return -ERESTARTSYS;
+	}	
 
     if (current_entry == NULL){
 		mutex_unlock(&dev->mutex_lock);
@@ -92,6 +95,10 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 	char *new_data;
 	const char *overwritten_ptr;
 	PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
+
+	if (mutex_lock_interruptible(&dev->mutex_lock)) {
+        return -ERESTARTSYS;
+    }
 
 	new_data = krealloc(dev->partial_write_buffer.buffptr, dev->partial_write_buffer.size + count, GFP_KERNEL);
 	if (!new_data) {
