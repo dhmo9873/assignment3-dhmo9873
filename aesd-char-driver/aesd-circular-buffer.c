@@ -34,8 +34,8 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     */
 	int total_size = 0;                                   // Tracks cumulative bytes processed across entries
 	int ind = buffer->out_offs;                           // Start from the oldest entry in the circular buffer
-
-	for(int count = 0; count < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; count++) {
+	int count = 0;
+	for(count = 0; count < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; count++) {
         struct aesd_buffer_entry *current_entry = &buffer->entry[ind];  // Pointer to current buffer entry
 
         // Check if the target offset falls within the current entry
