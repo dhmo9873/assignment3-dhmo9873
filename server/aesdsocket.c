@@ -351,7 +351,7 @@ int main(int argc, char* argv[])
         fprintf(stderr, "Error deleting file: ");
         perror(""); 
     }
-#error
+#endif
 
 	pthread_mutex_destroy(&mutex);
     closelog();
